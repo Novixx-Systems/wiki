@@ -1,0 +1,8 @@
+{
+    "website": "Novixx Wiki (change this in settings.json)",
+    "copyright": "Novixx Systems (change this in settings.json)",
+    "private_mode": true,
+    "allowed_ips": [
+        "IPs here"
+    ]
+}

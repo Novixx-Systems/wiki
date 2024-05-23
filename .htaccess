@@ -1,0 +1,9 @@
+# Deny access to the wiki_data.json file
+<Files "wiki_data.json">
+    Order allow,deny
+    Deny from all
+</Files>
+<Files "settings.json">
+    Order allow,deny
+    Deny from all
+</Files>
