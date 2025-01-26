@@ -1,5 +1,5 @@
 <?php
-// Novixx Wiki 0.1
+// Novixx Wiki 0.1.1
 // License: GPL-3.0
 // Description: A simple wiki software written in PHP
 // Thanks for using Novixx Wiki!
@@ -20,7 +20,7 @@ function not_allowed($message) {
     global $website, $copyright;
     die("<p>You are not allowed to perform this action. Reason: $message</p>
     <div class=\"footer\">
-            <p>Novixx Wiki 0.1 (Released 2024). $website (c) ". date('Y') . " " . $copyright . ". All rights reserved.</p>
+            <p>Novixx Wiki 0.1.1 (Released 2025). $website (c) ". date('Y') . " " . $copyright . ". All rights reserved.</p>
         </div>");
 }
 
@@ -42,9 +42,41 @@ if (isset($_GET['page']) && str_starts_with($_GET['page'], '_')) {
     }
 }
 
+// Import XML data
+if (isset($_GET['import'])) {
+    if ($private_mode && !in_array($_SERVER['REMOTE_ADDR'], $allowed_ips)) {
+        echo not_allowed("Private mode is enabled.");
+        die(); // not_allowed() already exits but just in case
+    }
+    $xml = simplexml_load_file('data.xml');
+    // <page>
+    //   <title>Home</title>
+    //   <revision>
+    //     <text>Welcome to the home page!</text>
+    //   </revision>
+    // </page>
+    foreach ($xml->page as $page) {
+        $title = (string) $page->title;
+        $text = (string) $page->revision->text;
+    
+        if (!isset($data[$title])) {
+            $data[$title] = [time() => $text];
+        } else {
+            $lastKey = array_key_last($data[$title]);
+            if ($data[$title][$lastKey] !== $text) {
+                $data[$title][time()] = $text;
+            }
+        }
+    }
+    
+    saveData($data);
+    header("Location: ?page=home");
+    exit;
+}
+
 // Save data
 function saveData($data) {
-    file_put_contents(DATA_FILE, json_encode($data));
+    file_put_contents(DATA_FILE, json_encode($data, true));
 }
 
 // Handle page creation/editing
@@ -147,6 +179,10 @@ $content = $highest_content;
     </div>
     <div id="sidebar">
         <h3>Navigation</h3>
+        <form method="get">
+            <input type="text" name="search" placeholder="Search..." style="width: 100%; margin-bottom: 10px;">
+        </form>
+        <h3>Special Pages</h3>
         <ul>
             <li><a href="?page=home">Home</a></li>
             <li><a href="?page=about">About</a></li>
@@ -155,6 +191,42 @@ $content = $highest_content;
         </ul>
     </div>
     <div id="container">
+        <?php
+        $search = $_GET['search'] ?? '';
+        if ($search) {
+            $search_results = [];
+            foreach ($data as $title => $revisions) {
+                if (stripos($title, $search) !== false) {
+                    $search_results[$title] = $revisions;
+                }
+                else {
+                    $latest_content = end($revisions);
+                    if (stripos($latest_content, $search) !== false) {
+                        $search_results[$title] = $revisions;
+                    }
+                }
+            }
+            if ($search_results) {
+                echo '<h1>Search results for "' . htmlspecialchars($search) . '"</h1>';
+                echo '<ul>';
+                foreach ($search_results as $title => $revisions) {
+                    $highest_timestamp = 0;
+                    $highest_content = $error_404;
+                    foreach ($revisions as $timestamp => $content) {
+                        if ($timestamp > $highest_timestamp) {
+                            $highest_timestamp = $timestamp;
+                            $highest_content = $content;
+                        }
+                    }
+                    echo '<li><a href="?page=' . urlencode($title) . '">' . htmlspecialchars($title) . '</a></li>';
+                }
+                echo '</ul>';
+            }
+            else {
+                echo '<h1>No results found for "' . htmlspecialchars($search) . '"</h1>';
+            }
+        }
+        ?>
         <?php
         $delete = $_GET['delete'] ?? '';
         if ($delete) {
@@ -192,7 +264,36 @@ $content = $highest_content;
         <div class="content">
             <?php
             $parsed_content = nl2br(htmlspecialchars($content));
-            $parsed_content = preg_replace('/\[\[(.*?)\]\]/', '<a href="?page=$1">$1</a>', $parsed_content);
+
+            // Parse links
+            $parsed_content = preg_replace('/\[\[([^\|\]]+)(?:\|([^\]]+))?\]\]/', '<a href="?page=$1">$2</a>', $parsed_content);
+            $parsed_content = preg_replace('/<a href="\?page=([^"]+)"><\/a>/', '<a href="?page=$1">$1</a>', $parsed_content);
+
+            // Parse wiki tables
+            $parsed_content = preg_replace_callback(
+                '/\{\|(.+?)\|\}/s',
+                function ($matches) {
+                    $rows = preg_split('/\n\|\-/', trim($matches[1]));
+                    $tableHtml = "<table>";
+
+                    foreach ($rows as $row) {
+                        $tableHtml .= "<tr>";
+                        $cells = preg_split('/\||!/', trim($row));
+                        foreach ($cells as $cell) {
+                            if (strpos($row, '!') === 0) {
+                                $tableHtml .= "<th>" . trim($cell) . "</th>";
+                            } else {
+                                $tableHtml .= "<td>" . trim($cell) . "</td>";
+                            }
+                        }
+                        $tableHtml .= "</tr>";
+                    }
+                    $tableHtml .= "</table>";
+                    return $tableHtml;
+                },
+                $parsed_content
+            );
+
             echo $parsed_content;
             ?>
         </div>
@@ -219,7 +320,7 @@ $content = $highest_content;
         <hr>
         <?php } ?>
         <div class="footer">
-            <p>Novixx Wiki 0.1 (Released 2024). <?php echo $website ?> (c) <?php echo date('Y') . " " . $copyright ?>. All rights reserved.</p>
+            <p>Novixx Wiki 0.1.1 (Released 2025). <?php echo $website ?> (c) <?php echo date('Y') . " " . $copyright ?>. All rights reserved.</p>
         </div>
     </div>
 </body>
